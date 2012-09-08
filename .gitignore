@@ -1,0 +1,11 @@
+target/
+.idea/ant.xml
+.idea/workspace.xml
+.idea/uiDesigner.xml
+.idea/copyright/
+.idea/compiler.xml
+.idea/readme.txt
+.idea/dictionaries/
+.idea/libraries/Maven*
+.idea/inspectionProfiles/profiles_settings.xml
+
