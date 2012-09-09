@@ -1,9 +1,11 @@
 package bbyk.loadtests;
 
 import com.google.common.base.Function;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
 import com.whalin.MemCached.MemCachedClient;
 import com.whalin.MemCached.SockIOPool;
+import net.rubyeye.xmemcached.XMemcachedClient;
 import net.spy.memcached.MemcachedClient;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -39,6 +41,7 @@ public class ClientFactory {
             default:
             case SHARED_ONE_WHALIN:
             case SHARED_ONE_SPY_MEMCACHED:
+            case SHARED_ONE_XMEMCACHED:
                 if (sharedClient == null)
                     sharedClient = create();
                 return sharedClient;
@@ -76,7 +79,26 @@ public class ClientFactory {
                         c.set(key, buffer);
                     }
                 };
+            case SHARED_ONE_XMEMCACHED:
+                return new BasicMemcachedClient() {
+                    final XMemcachedClient c = new XMemcachedClient(Arrays.asList(addresses));
 
+                    public byte[] get(@NotNull String key) {
+                        try {
+                            return (byte[]) c.get(key);
+                        } catch (Exception e) {
+                            throw Throwables.propagate(e);
+                        }
+                    }
+
+                    public void set(@NotNull String key, @Nullable byte[] buffer) {
+                        try {
+                            c.set(key, 0, buffer);
+                        } catch (Exception e) {
+                            throw Throwables.propagate(e);
+                        }
+                    }
+                };
         }
     }
 }

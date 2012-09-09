@@ -40,26 +40,42 @@ public class MemcachedClientsLoadTest {
     }
 
     @Test
-    public void testBigRoundtrip() throws Exception {
+    public void testReadWriteProfiles() throws Exception {
 
         // params of the test
         final int[] params = new int[]{
                 /* doc size, nthreads, iterations */
+                30 * 1024, 5, 1000,
+                5 * 1024, 5, 1000,
                 30 * 1024, 50, 1000,
                 5 * 1024, 50, 1000,
-                30 * 1024, 5, 1000
+                30 * 1024, 100, 1000,
+                5 * 1024, 100, 1000,
+                30 * 1024, 200, 1000,
+                5 * 1024, 200, 1000,
         };
 
         final ClientSetup[] clientSetups = ClientSetup.values();
         for (final ClientSetup clientSetup : clientSetups) {
             for (int i = 0; i < params.length; ) {
-                testRoundtrip(clientSetup, params[i++], params[i++], params[i++]);
+                testReadWriteProfile(clientSetup, params[i++], params[i++], params[i++]);
             }
         }
     }
 
-    private void testRoundtrip(@NotNull final ClientSetup setup, final int docSize, final int threadCount, final int sessionLoopCount) throws Exception {
-        System.out.printf("Setup: %s, document size: %d, threadCount: %d, sessionLoopCount: %s", setup, docSize, threadCount, sessionLoopCount);
+    private void testReadWriteProfileSafe(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+                                          final int sessionLoopCount) throws Exception {
+        try {
+            testReadWriteProfile(setup, docSize, threadCount, sessionLoopCount);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void testReadWriteProfile(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+                                      final int sessionLoopCount) throws Exception {
+        System.out.printf("Setup: %s, document size: %d, threadCount: %d, sessionLoopCount: %s", setup, docSize,
+                threadCount, sessionLoopCount);
         System.out.println();
 
         // prepare the seedBuffer
@@ -161,5 +177,7 @@ public class MemcachedClientsLoadTest {
             System.out.println("no errors");
         }
 
+        // clean up threads for this test
+        executorService.shutdownNow();
     }
 }
