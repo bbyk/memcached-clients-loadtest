@@ -4,9 +4,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import org.testng.annotations.BeforeTest;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Properties;
 import java.util.Random;
@@ -21,9 +22,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author bbyk
  */
 public class MemcachedClientsLoadTest {
+    private Properties properties;
 
-    @BeforeTest
-    public void setup() {
+    @BeforeClass
+    public void setup() throws IOException {
         // Tell spy to use the SunLogger
         final Properties systemProperties = System.getProperties();
         systemProperties.put("net.spy.log.LoggerImpl", "net.spy.memcached.compat.log.Log4JLogger");
@@ -31,6 +33,10 @@ public class MemcachedClientsLoadTest {
 
         // turn off logging
         Logger.getRootLogger().setLevel(Level.OFF);
+
+        Properties prop = new Properties();
+        prop.load(getClass().getClassLoader().getResourceAsStream("test.properties"));
+        properties = prop;
     }
 
     @Test
@@ -62,13 +68,14 @@ public class MemcachedClientsLoadTest {
         rnd.nextBytes(seedBuffer);
 
         // prepare shared state
-        final InetSocketAddress localhostAddr = new InetSocketAddress("localhost", 11211);
+        final String property = properties.getProperty("memcached.servers", "localhost:11211");
+        final InetSocketAddress[] inetSocketAddresses = extractAddrs(property);
         final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         final CountDownLatch allDone = new CountDownLatch(threadCount);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
         final AtomicInteger errorCount = new AtomicInteger();
         final ConcurrentHashMap<Class, Exception> errorSet = new ConcurrentHashMap<Class, Exception>();
-        final ClientFactory clientFactory = new ClientFactory(setup, localhostAddr);
+        final ClientFactory clientFactory = new ClientFactory(setup, inetSocketAddresses);
         final AtomicInteger loopCount = new AtomicInteger();
         final AtomicInteger reqCount = new AtomicInteger();
         final AtomicLong avgRespTime = new AtomicLong();
@@ -156,5 +163,20 @@ public class MemcachedClientsLoadTest {
             System.out.println("no errors");
         }
 
+    }
+
+    private static InetSocketAddress[] extractAddrs(String csvServers) {
+        final String[] strings = StringUtils.split(csvServers, ',');
+        final InetSocketAddress[] result = new InetSocketAddress[strings.length];
+
+        int i = 0;
+        for (final String hostAndPort : strings) {
+            final String[] pair = StringUtils.split(hostAndPort, ':');
+            final InetSocketAddress address = new InetSocketAddress(pair[0], Integer.parseInt(pair[1]));
+            result[i] = address;
+            i++;
+        }
+
+        return result;
     }
 }

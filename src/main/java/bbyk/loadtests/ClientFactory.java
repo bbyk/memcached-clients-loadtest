@@ -10,12 +10,12 @@ import java.net.InetSocketAddress;
  */
 public class ClientFactory {
     private ClientSetup setup;
-    private InetSocketAddress address;
+    private InetSocketAddress[] addresses;
     private BasicMemcachedClient sharedClient;
 
-    public ClientFactory(@NotNull ClientSetup setup, @NotNull InetSocketAddress address) {
+    public ClientFactory(@NotNull ClientSetup setup, @NotNull InetSocketAddress[] addresses) {
         this.setup = setup;
-        this.address = address;
+        this.addresses = addresses;
     }
 
     public BasicMemcachedClient getOrCreate() throws Exception {
@@ -32,7 +32,7 @@ public class ClientFactory {
 
     private BasicMemcachedClient create() throws Exception {
         return new BasicMemcachedClient() {
-            final MemcachedClient c = new MemcachedClient(address);
+            final MemcachedClient c = new MemcachedClient(addresses);
 
             public byte[] get(@NotNull String key) {
                 return (byte[]) c.get(key);
