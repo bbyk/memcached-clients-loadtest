@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class MemcachedClientsLoadTest {
     private InetSocketAddress[] addresses;
+    final ExecutorService executorService = Executors.newFixedThreadPool(200);
+
 
     @BeforeClass
     public void setup() throws IOException {
@@ -58,7 +60,7 @@ public class MemcachedClientsLoadTest {
         final ClientSetup[] clientSetups = ClientSetup.values();
         for (final ClientSetup clientSetup : clientSetups) {
             for (int i = 0; i < params.length; ) {
-                testReadWriteProfile(clientSetup, params[i++], params[i++], params[i++]);
+                testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++]);
             }
         }
     }
@@ -84,7 +86,6 @@ public class MemcachedClientsLoadTest {
         rnd.nextBytes(seedBuffer);
 
         // prepare shared state
-        final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         final CountDownLatch allDone = new CountDownLatch(threadCount);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
         final AtomicInteger errorCount = new AtomicInteger();
@@ -176,8 +177,5 @@ public class MemcachedClientsLoadTest {
         } else {
             System.out.println("no errors");
         }
-
-        // clean up threads for this test
-        executorService.shutdownNow();
     }
 }
