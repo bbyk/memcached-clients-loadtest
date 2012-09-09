@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author bbyk
  */
 public class MemcachedClientsLoadTest {
-    private Properties properties;
+    private InetSocketAddress[] addresses;
 
     @BeforeClass
     public void setup() throws IOException {
@@ -34,9 +34,9 @@ public class MemcachedClientsLoadTest {
         // turn off logging
         Logger.getRootLogger().setLevel(Level.OFF);
 
-        Properties prop = new Properties();
-        prop.load(getClass().getClassLoader().getResourceAsStream("test.properties"));
-        properties = prop;
+        addresses = new InetSocketAddress[]{
+                new InetSocketAddress("localhost", 11211)
+        };
     }
 
     @Test
@@ -68,14 +68,12 @@ public class MemcachedClientsLoadTest {
         rnd.nextBytes(seedBuffer);
 
         // prepare shared state
-        final String property = properties.getProperty("memcached.servers", "localhost:11211");
-        final InetSocketAddress[] inetSocketAddresses = extractAddrs(property);
         final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         final CountDownLatch allDone = new CountDownLatch(threadCount);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
         final AtomicInteger errorCount = new AtomicInteger();
         final ConcurrentHashMap<Class, Exception> errorSet = new ConcurrentHashMap<Class, Exception>();
-        final ClientFactory clientFactory = new ClientFactory(setup, inetSocketAddresses);
+        final ClientFactory clientFactory = new ClientFactory(setup, addresses);
         final AtomicInteger loopCount = new AtomicInteger();
         final AtomicInteger reqCount = new AtomicInteger();
         final AtomicLong avgRespTime = new AtomicLong();
@@ -163,20 +161,5 @@ public class MemcachedClientsLoadTest {
             System.out.println("no errors");
         }
 
-    }
-
-    private static InetSocketAddress[] extractAddrs(String csvServers) {
-        final String[] strings = StringUtils.split(csvServers, ',');
-        final InetSocketAddress[] result = new InetSocketAddress[strings.length];
-
-        int i = 0;
-        for (final String hostAndPort : strings) {
-            final String[] pair = StringUtils.split(hostAndPort, ':');
-            final InetSocketAddress address = new InetSocketAddress(pair[0], Integer.parseInt(pair[1]));
-            result[i] = address;
-            i++;
-        }
-
-        return result;
     }
 }
