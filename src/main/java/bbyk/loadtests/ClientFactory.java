@@ -37,16 +37,12 @@ public class ClientFactory {
     }
 
     public BasicMemcachedClient getOrCreate() throws Exception {
-        switch (setup) {
-            default:
-            case SHARED_ONE_WHALIN:
-            case SHARED_ONE_SPY_MEMCACHED:
-            case SHARED_ONE_XMEMCACHED:
-                if (sharedClient == null)
-                    sharedClient = create();
-                return sharedClient;
-            case PER_THREAD_SPY_MEMCACHED:
-                return create();
+        if (setup.isShared) {
+            if (sharedClient == null)
+                sharedClient = create();
+            return sharedClient;
+        } else {
+            return create();
         }
     }
 
