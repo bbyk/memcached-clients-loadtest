@@ -1,5 +1,6 @@
 package bbyk.loadtests;
 
+import com.google.code.yanf4j.config.Configuration;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
@@ -7,6 +8,7 @@ import com.whalin.MemCached.MemCachedClient;
 import com.whalin.MemCached.SockIOPool;
 import net.rubyeye.xmemcached.MemcachedClientBuilder;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
+import net.spy.memcached.ConnectionFactoryBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,6 +35,7 @@ public class ClientFactory {
                     }
                 }), String.class);
         pool.setServers(strAddresses);
+        pool.setSocketTO(2000); // whalin socket timeout
         pool.initialize();
     }
 
@@ -52,8 +55,13 @@ public class ClientFactory {
             default:
             case SHARED_ONE_SPY_MEMCACHED:
             case PER_THREAD_SPY_MEMCACHED:
+                final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();
+                spyBuilder.setTimeoutExceptionThreshold(2000);
+                spyBuilder.setOpTimeout(2000); // 2 sec
+
                 return new BasicMemcachedClient() {
-                    final net.spy.memcached.MemcachedClient c = new net.spy.memcached.MemcachedClient(addresses);
+                    final net.spy.memcached.MemcachedClient c = new net.spy.memcached.MemcachedClient(spyBuilder.build(),
+                            Arrays.asList(addresses));
 
                     public byte[] get(@NotNull String key) {
                         return (byte[]) c.get(key);
@@ -76,11 +84,12 @@ public class ClientFactory {
                     }
                 };
             case SHARED_ONE_XMEMCACHED:
-                final MemcachedClientBuilder builder = new XMemcachedClientBuilder(Arrays.asList(addresses));
-                builder.setConnectionPoolSize(2);
+                final MemcachedClientBuilder xbuilder = new XMemcachedClientBuilder(Arrays.asList(addresses));
+                xbuilder.setConnectionPoolSize(2);
+                xbuilder.getConfiguration().setSoTimeout(2000); // 2 sec
 
                 return new BasicMemcachedClient() {
-                    final net.rubyeye.xmemcached.MemcachedClient c = builder.build();
+                    final net.rubyeye.xmemcached.MemcachedClient c = xbuilder.build();
 
                     public byte[] get(@NotNull String key) {
                         try {
