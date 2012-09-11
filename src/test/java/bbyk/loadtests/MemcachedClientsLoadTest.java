@@ -52,10 +52,13 @@ public class MemcachedClientsLoadTest {
                 30 * 1024, 50, 1000,
                 5 * 1024, 50, 1000,
                 30 * 1024, 100, 1000,
-                5 * 1024, 100, 1000,
-                30 * 1024, 200, 1000,
-                5 * 1024, 200, 1000,
+                5 * 1024, 100, 1000
         };
+
+        System.out.println("tps - transactions per second");
+        System.out.println("mrps - memcached requests per second");
+        System.out.println("avtt - avarage transaction time in milliseconds");
+        System.out.println();
 
         final ClientSetup[] clientSetups = ClientSetup.values();
         for (final ClientSetup clientSetup : clientSetups) {
@@ -117,8 +120,11 @@ public class MemcachedClientsLoadTest {
                             byte[] bytes = client.get(cacheKey);
                             reqCount.incrementAndGet();
 
-                            if (bytes == null)
+                            if (j == 0)
                                 bytes = seedBuffer;
+                            else if (bytes.length != seedBuffer.length)
+                                throw new RuntimeException("returned null");
+
                             // modify data -- skipped
                             // write from memcache
                             client.set(cacheKey, bytes);
@@ -152,7 +158,7 @@ public class MemcachedClientsLoadTest {
             final int newAvgRespTimeBase = avgRespTimeBase.get();
             final int dxRespTimeBase = newAvgRespTimeBase - lastAvgRespTimeBase;
 
-            System.out.printf("loops per sec: %d, memcached req per sec: %d, avg resp time(ms): %d",
+            System.out.printf("tps: %5d, mrps: %5d, avtt: %d",
                     (newLoopCount - lastLoopCount),
                     (newReqCount - lastReqCount),
                     dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase);
@@ -170,12 +176,14 @@ public class MemcachedClientsLoadTest {
         // report errors
         if (errorCount.get() > 0) {
             // print errors:
-            System.out.println("errors happened:" + errorCount.get());
+            System.out.println("exceptions happened:" + errorCount.get());
             for (final Exception exception : errorSet.values()) {
-                System.out.println("exception = " + exception);
+                System.out.println("exception type = " + exception);
             }
         } else {
             System.out.println("no errors");
         }
+
+        System.out.println();
     }
 }
