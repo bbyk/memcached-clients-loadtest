@@ -122,8 +122,8 @@ public class MemcachedClientsLoadTest {
 
                             if (j == 0)
                                 bytes = seedBuffer;
-                            else if (bytes.length != seedBuffer.length)
-                                throw new RuntimeException("returned null");
+                            else if (bytes == null || bytes.length != seedBuffer.length)
+                                throw new RuntimeException("returned null or broken data");
 
                             // modify data -- skipped
                             // write from memcache

@@ -1,6 +1,5 @@
 package bbyk.loadtests;
 
-import com.google.code.yanf4j.config.Configuration;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
@@ -19,6 +18,7 @@ import java.util.Arrays;
  * @author bbyk
  */
 public class ClientFactory {
+    private static final int OP_TIMEOUT = 2000;
     private ClientSetup setup;
     private InetSocketAddress[] addresses;
     private BasicMemcachedClient sharedClient;
@@ -35,7 +35,7 @@ public class ClientFactory {
                     }
                 }), String.class);
         pool.setServers(strAddresses);
-        pool.setSocketTO(2000); // whalin socket timeout
+        pool.setSocketTO(OP_TIMEOUT); // whalin socket timeout
         pool.initialize();
     }
 
@@ -56,8 +56,8 @@ public class ClientFactory {
             case SHARED_ONE_SPY_MEMCACHED:
             case PER_THREAD_SPY_MEMCACHED:
                 final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();
-                spyBuilder.setTimeoutExceptionThreshold(2000);
-                spyBuilder.setOpTimeout(2000); // 2 sec
+                spyBuilder.setTimeoutExceptionThreshold(OP_TIMEOUT);
+                spyBuilder.setOpTimeout(OP_TIMEOUT); // 2 sec
 
                 return new BasicMemcachedClient() {
                     final net.spy.memcached.MemcachedClient c = new net.spy.memcached.MemcachedClient(spyBuilder.build(),
@@ -86,7 +86,7 @@ public class ClientFactory {
             case SHARED_ONE_XMEMCACHED:
                 final MemcachedClientBuilder xbuilder = new XMemcachedClientBuilder(Arrays.asList(addresses));
                 xbuilder.setConnectionPoolSize(2);
-                xbuilder.getConfiguration().setSoTimeout(2000); // 2 sec
+                xbuilder.getConfiguration().setSoTimeout(OP_TIMEOUT); // 2 sec
 
                 return new BasicMemcachedClient() {
                     final net.rubyeye.xmemcached.MemcachedClient c = xbuilder.build();
