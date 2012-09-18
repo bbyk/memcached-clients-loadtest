@@ -46,17 +46,19 @@ public class MemcachedClientsLoadTest {
         // params of the test
         final int[] params = new int[]{
                 /* doc size, nthreads, actors, requests per second, seconds */
-                10 * 1024, 300, 10000, 4000, 120,
-                30 * 1024, 5, 10000, 4000, 120,
-                5 * 1024, 5, 10000, 4000, 120,
-                5 * 1024, 50, 10000, 4000, 120,
-                30 * 1024, 100, 10000, 4000, 120,
-                5 * 1024, 100, 10000, 4000, 120
+                10 * 1024, 300, 10000, 1000, 120,
+                30 * 1024, 5, 10000, 1000, 120,
+                5 * 1024, 5, 10000, 1000, 120,
+                5 * 1024, 50, 10000, 1000, 120,
+                30 * 1024, 100, 10000, 1000, 120,
+                5 * 1024, 100, 10000, 1000, 120
         };
 
         System.out.println("tps - transactions per second");
+        System.out.println("tt - total number transactions processed");
         System.out.println("mrps - memcached requests per second");
         System.out.println("qs - request queue size");
+        System.out.println("err - number of errors");
         System.out.println("avtt - avarage transaction time in milliseconds");
         System.out.println();
 
@@ -98,9 +100,7 @@ public class MemcachedClientsLoadTest {
         final int totalNumberOfRequests = requestsPerSecond * seconds;
 
         // prepare shared state
-        final ExecutorService executorService = new ThreadPoolExecutor(0, threadCount,
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<Runnable>());
+        final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
 
         final CountDownLatch allDone = new CountDownLatch(totalNumberOfRequests);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
@@ -112,7 +112,6 @@ public class MemcachedClientsLoadTest {
         final AtomicLong avgRespTime = new AtomicLong();
         final AtomicInteger avgRespTimeBase = new AtomicInteger();
         final AtomicInteger queueSize = new AtomicInteger();
-        final AtomicInteger enterCount = new AtomicInteger();
 
         // for everything except PER_THREAD_SPY_MEMCACHED it's the same instance
         final ArrayBlockingQueue<BasicMemcachedClient> actorClients = new ArrayBlockingQueue<BasicMemcachedClient>(numberOfActors);
@@ -239,12 +238,11 @@ public class MemcachedClientsLoadTest {
             final int newAvgRespTimeBase = avgRespTimeBase.get();
             final int dxRespTimeBase = newAvgRespTimeBase - lastAvgRespTimeBase;
 
-            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, cs: %5d, err: %5d, avtt: %d",
+            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d",
                     (newTransactionCount - lastTransactionCount),
                     newTransactionCount,
                     (newReqCount - lastReqCount),
                     queueSize.get(),
-                    actorClients.size(),
                     (newErrorCount - lastErrorCount),
                     dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase);
 
