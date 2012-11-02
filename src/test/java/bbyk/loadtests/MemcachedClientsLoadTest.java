@@ -46,8 +46,8 @@ public class MemcachedClientsLoadTest {
         // params of the test
         final int[] params = new int[]{
                 /* doc size, nthreads, actors, requests per second, seconds */
-                10 * 1024, 300, 10000, 1000, 120,
-                30 * 1024, 5, 10000, 1000, 120,
+                5 * 1024, 300, 10000, 2000, 120,
+                30 * 1024, 5, 10000, 1000, 1,
                 5 * 1024, 5, 10000, 1000, 120,
                 5 * 1024, 50, 10000, 1000, 120,
                 30 * 1024, 100, 10000, 1000, 120,
