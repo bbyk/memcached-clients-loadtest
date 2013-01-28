@@ -8,6 +8,7 @@ import com.whalin.MemCached.SockIOPool;
 import net.rubyeye.xmemcached.MemcachedClientBuilder;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
 import net.spy.memcached.ConnectionFactoryBuilder;
+import net.spy.memcached.transcoders.SerializingTranscoder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -58,6 +59,11 @@ public class ClientFactory {
                 final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();
                 spyBuilder.setTimeoutExceptionThreshold(OP_TIMEOUT);
                 spyBuilder.setOpTimeout(OP_TIMEOUT); // 2 sec
+
+                // turning off compression
+                final SerializingTranscoder transcoder = new SerializingTranscoder();
+                transcoder.setCompressionThreshold(Integer.MAX_VALUE);
+                spyBuilder.setTranscoder(transcoder);
 
                 return new BasicMemcachedClient() {
                     final net.spy.memcached.MemcachedClient c = new net.spy.memcached.MemcachedClient(spyBuilder.build(),
