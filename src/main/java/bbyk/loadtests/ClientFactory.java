@@ -1,5 +1,8 @@
 package bbyk.loadtests;
 
+import com.couchbase.client.CouchbaseClient;
+import com.couchbase.client.CouchbaseConnectionFactory;
+import com.couchbase.client.CouchbaseConnectionFactoryBuilder;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
@@ -13,7 +16,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * @author bbyk
@@ -23,6 +29,7 @@ public class ClientFactory {
     private ClientSetup setup;
     private InetSocketAddress[] addresses;
     private BasicMemcachedClient sharedClient;
+    private List<URI> couchBaseHosts;
 
     public ClientFactory(@NotNull ClientSetup setup, @NotNull InetSocketAddress[] addresses) {
         this.setup = setup;
@@ -38,6 +45,17 @@ public class ClientFactory {
         pool.setServers(strAddresses);
         pool.setSocketTO(OP_TIMEOUT); // whalin socket timeout
         pool.initialize();
+
+        couchBaseHosts = Arrays.asList(Iterables.toArray(Iterables.transform(Arrays.asList(addresses),
+                new Function<InetSocketAddress, URI>() {
+                    public URI apply(InetSocketAddress address) {
+                        try {
+                            return new URI("http://" + address.getHostName() + ':' + address.getPort() + "/pools");
+                        } catch (URISyntaxException e) {
+                            throw Throwables.propagate(e);
+                        }
+                    }
+                }), URI.class));
     }
 
     public BasicMemcachedClient getOrCreate() throws Exception {
@@ -54,6 +72,30 @@ public class ClientFactory {
 
         switch (setup) {
             default:
+            case SHARED_ONE_SPY_COUCHBASE:
+                final CouchbaseConnectionFactoryBuilder spyCouchBuilder = new CouchbaseConnectionFactoryBuilder();
+                spyCouchBuilder.setTimeoutExceptionThreshold(OP_TIMEOUT);
+                spyCouchBuilder.setOpTimeout(OP_TIMEOUT); // 2 sec
+
+                // turning off compression
+                final SerializingTranscoder couchTranscoder = new SerializingTranscoder();
+                couchTranscoder.setCompressionThreshold(Integer.MAX_VALUE);
+                spyCouchBuilder.setTranscoder(couchTranscoder);
+
+                return new BasicMemcachedClient() {
+                    final CouchbaseConnectionFactory connectionFactory = spyCouchBuilder.buildCouchbaseConnection(couchBaseHosts, "default", "", "");
+                    
+                    final CouchbaseClient c = new CouchbaseClient(connectionFactory);
+
+                    public byte[] get(@NotNull String key) {
+                        return (byte[]) c.get(key);
+                    }
+
+                    public void set(@NotNull String key, byte[] buffer) {
+                        c.set(key, 0, buffer);
+                    }
+                };
+                
             case SHARED_ONE_SPY_MEMCACHED:
             case PER_THREAD_SPY_MEMCACHED:
                 final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();

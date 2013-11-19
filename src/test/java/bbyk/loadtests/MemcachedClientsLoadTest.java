@@ -53,6 +53,7 @@ public class MemcachedClientsLoadTest {
                 30 * 1024, 100, 10000, 1000, 120,
                 5 * 1024, 100, 10000, 1000, 120
         };
+        final ClientSetup[] clientSetups = new ClientSetup[] { ClientSetup.SHARED_ONE_SPY_MEMCACHED, ClientSetup.SHARED_ONE_WHALIN };
 
         System.out.println("tps - transactions per second");
         System.out.println("tt - total number transactions processed");
@@ -62,7 +63,6 @@ public class MemcachedClientsLoadTest {
         System.out.println("avtt - avarage transaction time in milliseconds");
         System.out.println();
 
-        final ClientSetup[] clientSetups = ClientSetup.values();
         for (final ClientSetup clientSetup : clientSetups) {
             for (int i = 0; i < params.length; ) {
                 testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++], params[i++], params[i++]);
