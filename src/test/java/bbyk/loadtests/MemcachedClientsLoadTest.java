@@ -4,17 +4,20 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -55,14 +58,18 @@ public class MemcachedClientsLoadTest {
                 30 * 1024, 100, 100, 10000, 1000, 120, 0,
                 5 * 1024, 100, 100, 10000, 1000, 120, 0
         };
-        final ClientSetup[] clientSetups = new ClientSetup[] { ClientSetup.SHARED_ONE_SPY_MEMCACHED, ClientSetup.SHARED_ONE_WHALIN };
+        final ClientSetup[] clientSetups = new ClientSetup[]{ClientSetup.SHARED_ONE_SPY_MEMCACHED, ClientSetup.SHARED_ONE_WHALIN};
 
         System.out.println("tps - transactions per second");
         System.out.println("tt - total number transactions processed");
         System.out.println("mrps - memcached requests per second");
-        System.out.println("qs - request queue size");
+        System.out.println("qs - requests queued to process");
         System.out.println("err - number of errors");
         System.out.println("avtt - avarage transaction time in milliseconds");
+        System.out.println("mtt - maximum transaction time in milliseconds");
+        System.out.println("avct - avarage memcache/couchbase call time in milliseconds");
+        System.out.println("busy - number of busy threads");
+        System.out.println("qst - thread pool queue size");
         System.out.println();
 
         for (final ClientSetup clientSetup : clientSetups) {
@@ -112,11 +119,10 @@ public class MemcachedClientsLoadTest {
         final ConcurrentHashMap<Class, Exception> errorSet = new ConcurrentHashMap<Class, Exception>();
         final ClientFactory clientFactory = new ClientFactory(setup, addresses);
         final AtomicInteger transactionCount = new AtomicInteger();
-        final AtomicInteger reqCount = new AtomicInteger();
+        final AtomicInteger callCount = new AtomicInteger();
         final AtomicLong avgCallRespTime = new AtomicLong();
-        final AtomicLong avgRespTime = new AtomicLong();
-        final AtomicLong avgRespMax = new AtomicLong();
-        final AtomicInteger avgRespTimeBase = new AtomicInteger();
+        final AtomicLong avgTransTime = new AtomicLong();
+        final AtomicLong maxTransTime = new AtomicLong();
         final AtomicInteger queueSize = new AtomicInteger();
 
         // for everything except PER_THREAD_SPY_MEMCACHED it's the same instance
@@ -182,11 +188,11 @@ public class MemcachedClientsLoadTest {
 
                                             // read from memcache
                                             final String cacheKey = "actorId:" + actorPrefix + ":" + actorId;
-                                            
+
                                             long startCallMs = System.currentTimeMillis();
                                             byte[] bytes = client.get(cacheKey);
                                             avgCallRespTime.addAndGet(System.currentTimeMillis() - startCallMs);
-                                            reqCount.incrementAndGet();
+                                            callCount.incrementAndGet();
 
                                             if (!actorInitialized[actorId]) {
                                                 bytes = seedBuffer.clone();
@@ -201,23 +207,21 @@ public class MemcachedClientsLoadTest {
                                             startCallMs = System.currentTimeMillis();
                                             client.set(cacheKey, bytes);
                                             avgCallRespTime.addAndGet(System.currentTimeMillis() - startCallMs);
-                                            reqCount.incrementAndGet();
+                                            callCount.incrementAndGet();
 
-                                            transactionCount.incrementAndGet();
                                             final long delta = System.currentTimeMillis() - startMs;
-                                            avgRespTime.addAndGet(delta);
-                                            
+                                            avgTransTime.addAndGet(delta);
+
                                             for (;;) {
-                                                long current = avgRespMax.get();
-                                                if (current < delta)
-                                                {
-                                                    if (!avgRespMax.compareAndSet(current, delta))
+                                                long current = maxTransTime.get();
+                                                if (current < delta) {
+                                                    if (!maxTransTime.compareAndSet(current, delta))
                                                         continue;
                                                 }
-                                                
+
                                                 break;
                                             }
-                                            avgRespTimeBase.incrementAndGet();
+                                            transactionCount.incrementAndGet();
                                         } catch (Exception e) {
                                             errorCount.incrementAndGet();
                                             //noinspection ThrowableResultOfMethodCallIgnored
@@ -250,44 +254,41 @@ public class MemcachedClientsLoadTest {
 
         // poll until end and read counters
         int lastTransactionCount = transactionCount.get();
-        int lastReqCount = reqCount.get();
-        long lastAvgRespTime = avgRespTime.get();
-        long lastAvgCallRespTime=avgCallRespTime.get();
-        int lastAvgRespTimeBase = avgRespTimeBase.get();
+        int lastCallCount = callCount.get();
+        long lastAvgTransTime = avgTransTime.get();
+        long lastAvgCallRespTime = avgCallRespTime.get();
         int lastErrorCount = errorCount.get();
 
         while (!allDone.await(1, TimeUnit.SECONDS)) {
             final int newTransactionCount = transactionCount.get();
-            final int newReqCount = reqCount.get();
+            final int newCallCount = callCount.get();
             final int newErrorCount = errorCount.get();
-            final long newAvgRespTime = avgRespTime.get();
+            final long newAvgTransTime = avgTransTime.get();
             final long newAvgCallRespTime = avgCallRespTime.get();
-            final int newAvgRespTimeBase = avgRespTimeBase.get();
-            final int dxRespTimeBase = newAvgRespTimeBase - lastAvgRespTimeBase;
-            final int dxRequestCount = newReqCount - lastReqCount;
-            final long maxAvgRespTime = avgRespMax.get();
-            avgRespMax.set(0);
+            final int dxTransactionCount = newTransactionCount - lastTransactionCount;
+            final int dxCallCount = newCallCount - lastCallCount;
+            final long copyMaxTransTime = maxTransTime.get();
+            maxTransTime.set(0);
 
-            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d, avct: %d, busy: %d, qst: %d, mtt: %d",
-                    (newTransactionCount - lastTransactionCount),
+            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d, mtt: %d, avct: %d, busy: %d, qst: %d",
+                    dxTransactionCount,
                     newTransactionCount,
-                    dxRequestCount,
+                    dxCallCount,
                     queueSize.get(),
                     (newErrorCount - lastErrorCount),
-                    dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase,
-                    dxRequestCount == 0 ? 0 : (newAvgCallRespTime - lastAvgCallRespTime) / dxRequestCount,
+                    dxTransactionCount == 0 ? 0 : (newAvgTransTime - lastAvgTransTime) / dxTransactionCount,
+                    copyMaxTransTime,
+                    dxCallCount == 0 ? 0 : (newAvgCallRespTime - lastAvgCallRespTime) / dxCallCount,
                     executorService.getActiveCount(),
-                    executorService.getQueue().size(),
-                    maxAvgRespTime);
+                    executorService.getQueue().size());
 
             System.out.println();
             lastTransactionCount = newTransactionCount;
-            lastReqCount = newReqCount;
+            lastCallCount = newCallCount;
             lastErrorCount = newErrorCount;
 
-            if (dxRespTimeBase > 0) {
-                lastAvgRespTime = newAvgRespTime;
-                lastAvgRespTimeBase = newAvgRespTimeBase;
+            if (dxTransactionCount > 0) {
+                lastAvgTransTime = newAvgTransTime;
                 lastAvgCallRespTime = newAvgCallRespTime;
             }
         }
@@ -312,10 +313,10 @@ public class MemcachedClientsLoadTest {
 
     private void doHeavyLifting(byte[] bytes) {
         final Random rnd = new Random();
-        for (int ii = 0; ii< Math.min(bytes.length, 500); ii++)
-            for (int jj = ii; jj< Math.min(bytes.length, 500); jj++)  {
+        for (int ii = 0; ii < Math.min(bytes.length, 500); ii++)
+            for (int jj = ii; jj < Math.min(bytes.length, 500); jj++) {
                 byte tmp = bytes[ii];
-                bytes[ii] = (byte)((bytes[jj] * rnd.nextInt()) % Byte.MAX_VALUE);
+                bytes[ii] = (byte) ((bytes[jj] * rnd.nextInt()) % Byte.MAX_VALUE);
                 bytes[jj] = tmp;
             }
     }
