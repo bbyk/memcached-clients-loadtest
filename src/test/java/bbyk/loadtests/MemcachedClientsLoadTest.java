@@ -288,6 +288,7 @@ public class MemcachedClientsLoadTest {
             if (dxRespTimeBase > 0) {
                 lastAvgRespTime = newAvgRespTime;
                 lastAvgRespTimeBase = newAvgRespTimeBase;
+                lastAvgCallRespTime = newAvgCallRespTime;
             }
         }
 
