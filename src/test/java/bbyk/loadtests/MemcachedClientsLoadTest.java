@@ -47,13 +47,13 @@ public class MemcachedClientsLoadTest {
 
         // params of the test
         final int[] params = new int[]{
-                /* doc size, nthreads, actors, requests per second, seconds */
-                5 * 1024, 300, 10000, 2000, 120,
-                30 * 1024, 5, 10000, 1000, 1,
-                5 * 1024, 5, 10000, 1000, 120,
-                5 * 1024, 50, 10000, 1000, 120,
-                30 * 1024, 100, 10000, 1000, 120,
-                5 * 1024, 100, 10000, 1000, 120
+                /* doc size, cthreads, nthreads, actors, requests per second, seconds, heavy lifting */
+                5 * 1024, 300, 300, 10000, 2000, 120, 0,
+                30 * 1024, 5, 5, 10000, 1000, 1, 0,
+                5 * 1024, 5, 5, 10000, 1000, 120, 0,
+                5 * 1024, 50, 50, 10000, 1000, 120, 0,
+                30 * 1024, 100, 100, 10000, 1000, 120, 0,
+                5 * 1024, 100, 100, 10000, 1000, 120, 0
         };
         final ClientSetup[] clientSetups = new ClientSetup[] { ClientSetup.SHARED_ONE_SPY_MEMCACHED, ClientSetup.SHARED_ONE_WHALIN };
 
@@ -67,28 +67,28 @@ public class MemcachedClientsLoadTest {
 
         for (final ClientSetup clientSetup : clientSetups) {
             for (int i = 0; i < params.length; ) {
-                testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++], params[i++], params[i++]);
+                testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++], params[i++], params[i++], params[i++], params[i++] == 1);
             }
         }
     }
 
-    private void testReadWriteProfileSafe(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+    private void testReadWriteProfileSafe(@NotNull final ClientSetup setup, final int docSize, final int minThreadCount, final int maxThreadCount,
                                           final int numberOfActors, final int requestsPerSecond,
-                                          final int seconds) throws Exception {
+                                          final int seconds, final boolean doHeavyLifting) throws Exception {
         try {
-            testReadWriteProfile(setup, docSize, threadCount, numberOfActors, requestsPerSecond, seconds);
+            testReadWriteProfile(setup, docSize, minThreadCount, maxThreadCount, numberOfActors, requestsPerSecond, seconds, doHeavyLifting);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void testReadWriteProfile(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+    private void testReadWriteProfile(@NotNull final ClientSetup setup, final int docSize, final int minThreadCount, final int maxThreadCount,
                                       final int numberOfActors, final int requestsPerSecond,
-                                      final int seconds) throws Exception {
+                                      final int seconds, final boolean doHeavyLifting) throws Exception {
         System.out.printf("Setup: %s, document size: %d, threadCount: %d, numberOfActors: %d, requestsPerSecond: %d, seconds: %d",
                 setup,
                 docSize,
-                threadCount,
+                maxThreadCount,
                 numberOfActors,
                 requestsPerSecond,
                 seconds);
@@ -102,7 +102,7 @@ public class MemcachedClientsLoadTest {
         final int totalNumberOfRequests = requestsPerSecond * seconds;
 
         // prepare shared state
-        final ThreadPoolExecutor executorService = new ThreadPoolExecutor(0, threadCount,
+        final ThreadPoolExecutor executorService = new ThreadPoolExecutor(minThreadCount, maxThreadCount,
                 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>());
 
@@ -190,7 +190,8 @@ public class MemcachedClientsLoadTest {
                                             } else if (bytes == null || bytes.length != seedBuffer.length)
                                                 throw new RuntimeException("returned null or broken data");
 
-                                            doHeavyLifting(bytes);
+                                            if (doHeavyLifting)
+                                                doHeavyLifting(bytes);
                                             // modify data -- skipped
                                             // write from memcache
                                             client.set(cacheKey, bytes);

@@ -10,7 +10,6 @@ import com.whalin.MemCached.MemCachedClient;
 import com.whalin.MemCached.SockIOPool;
 import net.rubyeye.xmemcached.MemcachedClientBuilder;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
-import net.spy.memcached.CASValue;
 import net.spy.memcached.ConnectionFactoryBuilder;
 import net.spy.memcached.transcoders.SerializingTranscoder;
 import org.jetbrains.annotations.NotNull;
@@ -42,7 +41,8 @@ public class ClientFactory {
                     public String apply(InetSocketAddress address) {
                         return address.getHostName() + ':' + address.getPort();
                     }
-                }), String.class);
+                }
+        ), String.class);
         pool.setServers(strAddresses);
         pool.setSocketTO(OP_TIMEOUT); // whalin socket timeout
         pool.initialize();
@@ -56,7 +56,8 @@ public class ClientFactory {
                             throw Throwables.propagate(e);
                         }
                     }
-                }), URI.class));
+                }
+        ), URI.class));
     }
 
     public BasicMemcachedClient getOrCreate() throws Exception {
@@ -85,18 +86,18 @@ public class ClientFactory {
 
                 return new BasicMemcachedClient() {
                     final CouchbaseConnectionFactory connectionFactory = spyCouchBuilder.buildCouchbaseConnection(couchBaseHosts, "default", "", "");
-                    
+
                     final CouchbaseClient c = new CouchbaseClient(connectionFactory);
 
                     public byte[] get(@NotNull String key) {
-                        return (byte[]) c.gets(key).getValue();
+                        return (byte[]) c.get(key);
                     }
 
                     public void set(@NotNull String key, byte[] buffer) {
                         c.set(key, 0, buffer);
                     }
                 };
-                
+
             case SHARED_ONE_SPY_MEMCACHED:
             case PER_THREAD_SPY_MEMCACHED:
                 final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();
@@ -113,8 +114,7 @@ public class ClientFactory {
                             Arrays.asList(addresses));
 
                     public byte[] get(@NotNull String key) {
-                        final CASValue<Object> gets = c.gets(key);
-                        return gets == null ? null : (byte[]) gets.getValue();
+                        return (byte[]) c.get(key);
                     }
 
                     public void set(@NotNull String key, byte[] buffer) {
