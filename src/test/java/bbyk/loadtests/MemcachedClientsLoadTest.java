@@ -113,6 +113,7 @@ public class MemcachedClientsLoadTest {
         final ClientFactory clientFactory = new ClientFactory(setup, addresses);
         final AtomicInteger transactionCount = new AtomicInteger();
         final AtomicInteger reqCount = new AtomicInteger();
+        final AtomicLong avgCallRespTime = new AtomicLong();
         final AtomicLong avgRespTime = new AtomicLong();
         final AtomicLong avgRespMax = new AtomicLong();
         final AtomicInteger avgRespTimeBase = new AtomicInteger();
@@ -181,7 +182,10 @@ public class MemcachedClientsLoadTest {
 
                                             // read from memcache
                                             final String cacheKey = "actorId:" + actorPrefix + ":" + actorId;
+                                            
+                                            long startCallMs = System.currentTimeMillis();
                                             byte[] bytes = client.get(cacheKey);
+                                            avgCallRespTime.addAndGet(System.currentTimeMillis() - startMs);
                                             reqCount.incrementAndGet();
 
                                             if (!actorInitialized[actorId]) {
@@ -194,7 +198,9 @@ public class MemcachedClientsLoadTest {
                                                 doHeavyLifting(bytes);
                                             // modify data -- skipped
                                             // write from memcache
+                                            startCallMs = System.currentTimeMillis();
                                             client.set(cacheKey, bytes);
+                                            avgCallRespTime.addAndGet(System.currentTimeMillis() - startCallMs);
                                             reqCount.incrementAndGet();
 
                                             transactionCount.incrementAndGet();
@@ -246,6 +252,7 @@ public class MemcachedClientsLoadTest {
         int lastTransactionCount = transactionCount.get();
         int lastReqCount = reqCount.get();
         long lastAvgRespTime = avgRespTime.get();
+        long lastAvgCallRespTime=avgCallRespTime.get();
         int lastAvgRespTimeBase = avgRespTimeBase.get();
         int lastErrorCount = errorCount.get();
 
@@ -254,18 +261,21 @@ public class MemcachedClientsLoadTest {
             final int newReqCount = reqCount.get();
             final int newErrorCount = errorCount.get();
             final long newAvgRespTime = avgRespTime.get();
+            final long newAvgCallRespTime = avgCallRespTime.get();
             final int newAvgRespTimeBase = avgRespTimeBase.get();
             final int dxRespTimeBase = newAvgRespTimeBase - lastAvgRespTimeBase;
+            final int dxRequestCount = newReqCount - lastReqCount;
             final long maxAvgRespTime = avgRespMax.get();
             avgRespMax.set(0);
 
-            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d, busy: %d, qst: %d, mtt: %d",
+            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d, avct: %d, busy: %d, qst: %d, mtt: %d",
                     (newTransactionCount - lastTransactionCount),
                     newTransactionCount,
-                    (newReqCount - lastReqCount),
+                    dxRequestCount,
                     queueSize.get(),
                     (newErrorCount - lastErrorCount),
                     dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase,
+                    dxRequestCount == 0 ? 0 : (newAvgCallRespTime - lastAvgCallRespTime) / dxRequestCount,
                     executorService.getActiveCount(),
                     executorService.getQueue().size(),
                     maxAvgRespTime);
