@@ -10,6 +10,7 @@ import com.whalin.MemCached.MemCachedClient;
 import com.whalin.MemCached.SockIOPool;
 import net.rubyeye.xmemcached.MemcachedClientBuilder;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
+import net.spy.memcached.CASValue;
 import net.spy.memcached.ConnectionFactoryBuilder;
 import net.spy.memcached.transcoders.SerializingTranscoder;
 import org.jetbrains.annotations.NotNull;
@@ -88,7 +89,7 @@ public class ClientFactory {
                     final CouchbaseClient c = new CouchbaseClient(connectionFactory);
 
                     public byte[] get(@NotNull String key) {
-                        return (byte[]) c.get(key);
+                        return (byte[]) c.gets(key).getValue();
                     }
 
                     public void set(@NotNull String key, byte[] buffer) {
@@ -112,7 +113,8 @@ public class ClientFactory {
                             Arrays.asList(addresses));
 
                     public byte[] get(@NotNull String key) {
-                        return (byte[]) c.get(key);
+                        final CASValue<Object> gets = c.gets(key);
+                        return gets == null ? null : (byte[]) gets.getValue();
                     }
 
                     public void set(@NotNull String key, byte[] buffer) {
