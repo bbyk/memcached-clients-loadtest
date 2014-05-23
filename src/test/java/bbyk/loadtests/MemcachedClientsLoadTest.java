@@ -185,7 +185,7 @@ public class MemcachedClientsLoadTest {
                                             
                                             long startCallMs = System.currentTimeMillis();
                                             byte[] bytes = client.get(cacheKey);
-                                            avgCallRespTime.addAndGet(System.currentTimeMillis() - startMs);
+                                            avgCallRespTime.addAndGet(System.currentTimeMillis() - startCallMs);
                                             reqCount.incrementAndGet();
 
                                             if (!actorInitialized[actorId]) {
