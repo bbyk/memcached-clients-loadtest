@@ -4,11 +4,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -45,13 +47,13 @@ public class MemcachedClientsLoadTest {
 
         // params of the test
         final int[] params = new int[]{
-                /* doc size, nthreads, actors, requests per second, seconds */
-                5 * 1024, 300, 10000, 2000, 120,
-                30 * 1024, 5, 10000, 1000, 1,
-                5 * 1024, 5, 10000, 1000, 120,
-                5 * 1024, 50, 10000, 1000, 120,
-                30 * 1024, 100, 10000, 1000, 120,
-                5 * 1024, 100, 10000, 1000, 120
+                /* doc size, cthreads, nthreads, actors, requests per second, seconds, heavy lifting */
+                5 * 1024, 300, 300, 10000, 2000, 120, 0,
+                30 * 1024, 5, 5, 10000, 1000, 1, 0,
+                5 * 1024, 5, 5, 10000, 1000, 120, 0,
+                5 * 1024, 50, 50, 10000, 1000, 120, 0,
+                30 * 1024, 100, 100, 10000, 1000, 120, 0,
+                5 * 1024, 100, 100, 10000, 1000, 120, 0
         };
         final ClientSetup[] clientSetups = new ClientSetup[] { ClientSetup.SHARED_ONE_SPY_MEMCACHED, ClientSetup.SHARED_ONE_WHALIN };
 
@@ -65,28 +67,28 @@ public class MemcachedClientsLoadTest {
 
         for (final ClientSetup clientSetup : clientSetups) {
             for (int i = 0; i < params.length; ) {
-                testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++], params[i++], params[i++]);
+                testReadWriteProfileSafe(clientSetup, params[i++], params[i++], params[i++], params[i++], params[i++], params[i++], params[i++] == 1);
             }
         }
     }
 
-    private void testReadWriteProfileSafe(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+    private void testReadWriteProfileSafe(@NotNull final ClientSetup setup, final int docSize, final int minThreadCount, final int maxThreadCount,
                                           final int numberOfActors, final int requestsPerSecond,
-                                          final int seconds) throws Exception {
+                                          final int seconds, final boolean doHeavyLifting) throws Exception {
         try {
-            testReadWriteProfile(setup, docSize, threadCount, numberOfActors, requestsPerSecond, seconds);
+            testReadWriteProfile(setup, docSize, minThreadCount, maxThreadCount, numberOfActors, requestsPerSecond, seconds, doHeavyLifting);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void testReadWriteProfile(@NotNull final ClientSetup setup, final int docSize, final int threadCount,
+    private void testReadWriteProfile(@NotNull final ClientSetup setup, final int docSize, final int minThreadCount, final int maxThreadCount,
                                       final int numberOfActors, final int requestsPerSecond,
-                                      final int seconds) throws Exception {
+                                      final int seconds, final boolean doHeavyLifting) throws Exception {
         System.out.printf("Setup: %s, document size: %d, threadCount: %d, numberOfActors: %d, requestsPerSecond: %d, seconds: %d",
                 setup,
                 docSize,
-                threadCount,
+                maxThreadCount,
                 numberOfActors,
                 requestsPerSecond,
                 seconds);
@@ -100,7 +102,9 @@ public class MemcachedClientsLoadTest {
         final int totalNumberOfRequests = requestsPerSecond * seconds;
 
         // prepare shared state
-        final ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+        final ThreadPoolExecutor executorService = new ThreadPoolExecutor(minThreadCount, maxThreadCount,
+                0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
 
         final CountDownLatch allDone = new CountDownLatch(totalNumberOfRequests);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
@@ -110,6 +114,7 @@ public class MemcachedClientsLoadTest {
         final AtomicInteger transactionCount = new AtomicInteger();
         final AtomicInteger reqCount = new AtomicInteger();
         final AtomicLong avgRespTime = new AtomicLong();
+        final AtomicLong avgRespMax = new AtomicLong();
         final AtomicInteger avgRespTimeBase = new AtomicInteger();
         final AtomicInteger queueSize = new AtomicInteger();
 
@@ -180,18 +185,32 @@ public class MemcachedClientsLoadTest {
                                             reqCount.incrementAndGet();
 
                                             if (!actorInitialized[actorId]) {
-                                                bytes = seedBuffer;
+                                                bytes = seedBuffer.clone();
                                                 actorInitialized[actorId] = true;
                                             } else if (bytes == null || bytes.length != seedBuffer.length)
                                                 throw new RuntimeException("returned null or broken data");
 
+                                            if (doHeavyLifting)
+                                                doHeavyLifting(bytes);
                                             // modify data -- skipped
                                             // write from memcache
                                             client.set(cacheKey, bytes);
                                             reqCount.incrementAndGet();
 
                                             transactionCount.incrementAndGet();
-                                            avgRespTime.addAndGet(System.currentTimeMillis() - startMs);
+                                            final long delta = System.currentTimeMillis() - startMs;
+                                            avgRespTime.addAndGet(delta);
+                                            
+                                            for (;;) {
+                                                long current = avgRespMax.get();
+                                                if (current < delta)
+                                                {
+                                                    if (!avgRespMax.compareAndSet(current, delta))
+                                                        continue;
+                                                }
+                                                
+                                                break;
+                                            }
                                             avgRespTimeBase.incrementAndGet();
                                         } catch (Exception e) {
                                             errorCount.incrementAndGet();
@@ -237,14 +256,19 @@ public class MemcachedClientsLoadTest {
             final long newAvgRespTime = avgRespTime.get();
             final int newAvgRespTimeBase = avgRespTimeBase.get();
             final int dxRespTimeBase = newAvgRespTimeBase - lastAvgRespTimeBase;
+            final long maxAvgRespTime = avgRespMax.get();
+            avgRespMax.set(0);
 
-            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d",
+            System.out.printf("tps: %5d, tt: %5d, mrps: %5d, qs: %5d, err: %5d, avtt: %d, busy: %d, qst: %d, mtt: %d",
                     (newTransactionCount - lastTransactionCount),
                     newTransactionCount,
                     (newReqCount - lastReqCount),
                     queueSize.get(),
                     (newErrorCount - lastErrorCount),
-                    dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase);
+                    dxRespTimeBase == 0 ? 0 : (newAvgRespTime - lastAvgRespTime) / dxRespTimeBase,
+                    executorService.getActiveCount(),
+                    executorService.getQueue().size(),
+                    maxAvgRespTime);
 
             System.out.println();
             lastTransactionCount = newTransactionCount;
@@ -273,5 +297,15 @@ public class MemcachedClientsLoadTest {
         // recycle resources
         executorService.shutdownNow();
         Thread.sleep(2000);
+    }
+
+    private void doHeavyLifting(byte[] bytes) {
+        final Random rnd = new Random();
+        for (int ii = 0; ii< Math.min(bytes.length, 500); ii++)
+            for (int jj = ii; jj< Math.min(bytes.length, 500); jj++)  {
+                byte tmp = bytes[ii];
+                bytes[ii] = (byte)((bytes[jj] * rnd.nextInt()) % Byte.MAX_VALUE);
+                bytes[jj] = tmp;
+            }
     }
 }

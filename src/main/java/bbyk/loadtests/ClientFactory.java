@@ -41,7 +41,8 @@ public class ClientFactory {
                     public String apply(InetSocketAddress address) {
                         return address.getHostName() + ':' + address.getPort();
                     }
-                }), String.class);
+                }
+        ), String.class);
         pool.setServers(strAddresses);
         pool.setSocketTO(OP_TIMEOUT); // whalin socket timeout
         pool.initialize();
@@ -55,7 +56,8 @@ public class ClientFactory {
                             throw Throwables.propagate(e);
                         }
                     }
-                }), URI.class));
+                }
+        ), URI.class));
     }
 
     public BasicMemcachedClient getOrCreate() throws Exception {
@@ -84,7 +86,7 @@ public class ClientFactory {
 
                 return new BasicMemcachedClient() {
                     final CouchbaseConnectionFactory connectionFactory = spyCouchBuilder.buildCouchbaseConnection(couchBaseHosts, "default", "", "");
-                    
+
                     final CouchbaseClient c = new CouchbaseClient(connectionFactory);
 
                     public byte[] get(@NotNull String key) {
@@ -95,7 +97,7 @@ public class ClientFactory {
                         c.set(key, 0, buffer);
                     }
                 };
-                
+
             case SHARED_ONE_SPY_MEMCACHED:
             case PER_THREAD_SPY_MEMCACHED:
                 final ConnectionFactoryBuilder spyBuilder = new ConnectionFactoryBuilder();
