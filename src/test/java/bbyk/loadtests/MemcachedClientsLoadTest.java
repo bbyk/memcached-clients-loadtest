@@ -110,7 +110,7 @@ public class MemcachedClientsLoadTest {
 
         // prepare shared state
         final ThreadPoolExecutor executorService = new ThreadPoolExecutor(minThreadCount, maxThreadCount,
-                0L, TimeUnit.MILLISECONDS,
+                60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<Runnable>());
 
         final CountDownLatch allDone = new CountDownLatch(totalNumberOfRequests);
