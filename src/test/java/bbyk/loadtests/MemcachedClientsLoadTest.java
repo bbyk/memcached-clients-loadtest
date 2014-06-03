@@ -109,9 +109,11 @@ public class MemcachedClientsLoadTest {
         final int totalNumberOfRequests = requestsPerSecond * seconds;
 
         // prepare shared state
+        final TaskQueue taskQueue = new TaskQueue();
         final ThreadPoolExecutor executorService = new ThreadPoolExecutor(minThreadCount, maxThreadCount,
                 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>());
+                taskQueue);
+        taskQueue.setParent(executorService);
 
         final CountDownLatch allDone = new CountDownLatch(totalNumberOfRequests);
         final String actorPrefix = StringUtils.replace(UUID.randomUUID().toString(), "-", "");
